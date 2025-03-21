@@ -1,0 +1,2 @@
+- clear the entire stream: `redis-cli XTRIM install_queue MAXLEN 0`
+- docker exec -it marketplace-db psql -U admin -d marketplace
