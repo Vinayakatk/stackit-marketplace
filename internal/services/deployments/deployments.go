@@ -9,10 +9,25 @@ import (
 	"github.com/Vinayakatk/marketplace-prototype/pkg/database"
 	"github.com/Vinayakatk/marketplace-prototype/pkg/models"
 	"github.com/go-chi/chi/v5"
+	"gorm.io/gorm"
 	"net/http"
 	"strconv"
 	"time"
 )
+
+type deploymentResponse struct {
+	ID          uint `json:"id"`
+	Application struct {
+		ID          uint   `json:"id"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	} `json:"application"`
+	DeploymentType string `json:"deployment_type"`
+	ClusterName    string `json:"cluster_name,omitempty"`
+	VMName         string `json:"vm_name,omitempty"`
+	VMIP           string `json:"vm_ip,omitempty"`
+	Status         string `json:"status"`
+}
 
 // DeployApplication API (only for consumers)
 func DeployApplication(w http.ResponseWriter, r *http.Request) {
@@ -92,14 +107,36 @@ func GetDeployment(w http.ResponseWriter, r *http.Request) {
 
 	var deployment models.Deployment
 	if err := database.DB.
-		Preload("Application").
-		Preload("Consumer").
+		Preload("Application", func(db *gorm.DB) *gorm.DB {
+			// Preload only the fields of Application you want (exclude Publisher)
+			return db.Select("id, name, description")
+		}).
+		Select("id, application_id, deployment_type, cluster_name, vm_name, vm_ip, status").
 		First(&deployment, id).Error; err != nil {
 		http.Error(w, "Deployment not found", http.StatusNotFound)
 		return
 	}
 
-	json.NewEncoder(w).Encode(deployment)
+	// Define response DTO to exclude Consumer & Project
+	response := deploymentResponse{
+		ID: deployment.ID,
+		Application: struct {
+			ID          uint   `json:"id"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}{
+			ID:          deployment.Application.ID,
+			Name:        deployment.Application.Name,
+			Description: deployment.Application.Description,
+		},
+		DeploymentType: deployment.DeploymentType,
+		ClusterName:    deployment.ClusterName,
+		VMName:         deployment.VMName,
+		VMIP:           deployment.VMIP,
+		Status:         deployment.Status,
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
 
 func DeleteDeployment(w http.ResponseWriter, r *http.Request) {
@@ -174,8 +211,11 @@ func ListUserDeployments(w http.ResponseWriter, r *http.Request) {
 	// Create a slice to hold the deployments
 	var deployments []models.Deployment
 
-	// Query deployments where the ConsumerID matches the userID
-	query := database.DB.Where("consumer_id = ?", userID)
+	// Query deployments where the ConsumerID matches the userID, preloading the Application model
+	query := database.DB.Preload("Application", func(db *gorm.DB) *gorm.DB {
+		// Preload only necessary fields of the Application model
+		return db.Select("id, name, description")
+	}).Where("consumer_id = ?", userID)
 
 	// If a status is provided, filter by status
 	if status != "" {
@@ -188,7 +228,29 @@ func ListUserDeployments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prepare the response
+	response := make([]deploymentResponse, 0)
+	for _, deployment := range deployments {
+		response = append(response, deploymentResponse{
+			ID: deployment.ID,
+			Application: struct {
+				ID          uint   `json:"id"`
+				Name        string `json:"name"`
+				Description string `json:"description"`
+			}{
+				ID:          deployment.Application.ID,
+				Name:        deployment.Application.Name,
+				Description: deployment.Application.Description,
+			},
+			DeploymentType: deployment.DeploymentType,
+			ClusterName:    deployment.ClusterName,
+			VMName:         deployment.VMName,
+			VMIP:           deployment.VMIP,
+			Status:         deployment.Status,
+		})
+	}
+
 	// Return the deployments as JSON
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(deployments)
+	json.NewEncoder(w).Encode(response)
 }

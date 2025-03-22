@@ -1,30 +1,49 @@
 package helm
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os/exec"
-	"strings"
 )
 
-// DeployHelmChart deploys a Helm chart onto a Kind cluster
-func DeployHelmChart(clusterName, repoURL, chartName, application string) error {
+func DeployHelmChart(clusterName, repoURL, chartName, application, applicationID string) error {
+	// Construct a unique repo name
+	repoName := fmt.Sprintf("%s-%s", application, applicationID)
+
 	// Check if the repo already exists
-	listCmd := exec.Command("helm", "repo", "list")
+	listCmd := exec.Command("helm", "repo", "list", "--output", "json")
 	output, err := listCmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to list Helm repos: %v\n%s", err, string(output))
 	}
 
-	if strings.Contains(string(output), application) {
-		log.Printf("Helm repo %s already exists, skipping add", application)
+	// Parse JSON output to check if the repo exists
+	var repos []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(output, &repos); err != nil {
+		return fmt.Errorf("failed to parse Helm repo list: %v\n%s", err, string(output))
+	}
+
+	// Check if the repo is already present
+	repoExists := false
+	for _, repo := range repos {
+		if repo.Name == repoName {
+			repoExists = true
+			break
+		}
+	}
+
+	if repoExists {
+		log.Printf("✅ Helm repo %s already exists, skipping add", repoName)
 	} else {
 		// Add repo if it doesn't exist
-		addCmd := exec.Command("helm", "repo", "add", application, repoURL)
+		addCmd := exec.Command("helm", "repo", "add", repoName, repoURL)
 		if addOutput, addErr := addCmd.CombinedOutput(); addErr != nil {
 			return fmt.Errorf("failed to add repo: %v\n%s", addErr, string(addOutput))
 		}
-		log.Printf("Helm repo %s added successfully", application)
+		log.Printf("✅ Helm repo %s added successfully", repoName)
 	}
 
 	// Update the Helm repo
@@ -33,8 +52,8 @@ func DeployHelmChart(clusterName, repoURL, chartName, application string) error 
 		return fmt.Errorf("failed to update repo: %v\n%s", err, string(output))
 	}
 
-	// Install the Helm chart
-	installCmd := exec.Command("helm", "install", chartName, application+"/"+chartName, "--kube-context", "kind-"+clusterName)
+	// Install the Helm chart using the unique repo name
+	installCmd := exec.Command("helm", "install", chartName, repoName+"/"+chartName, "--kube-context", "kind-"+clusterName)
 	output, err = installCmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to deploy Helm chart: %v\n%s", err, string(output))

@@ -2,6 +2,7 @@ package users
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/Vinayakatk/marketplace-prototype/pkg/database"
 	"github.com/Vinayakatk/marketplace-prototype/pkg/models"
 	"net/http"
@@ -23,7 +24,10 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(user)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": fmt.Sprintf("User: %s created successfully", user.Name),
+	})
 }
 
 // ListUsers API

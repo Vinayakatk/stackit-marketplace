@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/Vinayakatk/marketplace-prototype/pkg/database"
 	"github.com/Vinayakatk/marketplace-prototype/pkg/models"
 	"github.com/go-chi/chi/v5"
@@ -63,7 +64,9 @@ func AddApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(app)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": fmt.Sprintf("Application: %s created successfully", app.Name),
+	})
 }
 
 func ListApplications(w http.ResponseWriter, r *http.Request) {

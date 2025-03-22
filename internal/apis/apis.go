@@ -15,13 +15,13 @@ func RegisterRoutes(r *chi.Mux) {
 		r.Post("/new", users.CreateUser) // Create a new user
 		r.Get("/", users.ListUsers)      // List all users
 
+		r.Get("/{id}/projects", projects.ListProjects) // List projects of a user
 		r.Get("/{id}/deployments", deployments.ListUserDeployments)
 	})
 
 	// Project routes
 	r.Route("/api/user/project", func(r chi.Router) {
 		r.Post("/new", projects.CreateProject)                        // Create a new project
-		r.Get("/{id}", projects.ListProjects)                         // List projects of a user
 		r.Get("/{id}/deployments", projects.GetDeploymentsOfAProject) // Get deployments of a project
 		r.Delete("/{id}", projects.DeleteProject)                     // Delete project
 	})

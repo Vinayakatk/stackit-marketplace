@@ -8,7 +8,6 @@ import (
 	"github.com/Vinayakatk/marketplace-prototype/pkg/models"
 	"log"
 	"os/exec"
-	"time"
 )
 
 type KubernetesProvisioner struct {
@@ -16,18 +15,30 @@ type KubernetesProvisioner struct {
 }
 
 func (kp *KubernetesProvisioner) Provision() error {
-	clusterName := fmt.Sprintf("kind-cluster-%s-%s-%d", kp.InstallReq.ConsumerID, kp.InstallReq.ApplicationID, time.Now().Unix())
+	// Fetch Deployment Record
+	var deployment models.Deployment
+	if err := database.DB.First(&deployment, kp.InstallReq.DeploymentID).Error; err != nil {
+		log.Println("❌ Deployment not found:", err)
+		return err
+	}
+	clusterName := fmt.Sprintf("kind-cluster-%s-%s-%s", kp.InstallReq.ConsumerID, kp.InstallReq.ApplicationID, kp.InstallReq.DeploymentID)
 	log.Printf("🚀 Provisioning Kubernetes Cluster: %s", clusterName)
 
 	if err := kubernetes.CreateKindCluster(clusterName); err != nil {
+		// Update status to "failed"
+		database.DB.Model(&deployment).Update("status", "failed")
 		return fmt.Errorf("❌ failed to create KIND cluster: %w", err)
 	}
 
 	if err := switchKubeContext(clusterName); err != nil {
+		// Update status to "failed"
+		database.DB.Model(&deployment).Update("status", "failed")
 		return fmt.Errorf("❌ failed to switch context: %w", err)
 	}
 
-	if err := helm.DeployHelmChart(clusterName, kp.InstallReq.RepoURL, kp.InstallReq.ChartName, kp.InstallReq.Application); err != nil {
+	if err := helm.DeployHelmChart(clusterName, kp.InstallReq.RepoURL, kp.InstallReq.ChartName, kp.InstallReq.Application, kp.InstallReq.ApplicationID); err != nil {
+		// Update status to "failed"
+		database.DB.Model(&deployment).Update("status", "failed")
 		return fmt.Errorf("❌ failed to deploy Helm chart: %w", err)
 	}
 
@@ -37,8 +48,6 @@ func (kp *KubernetesProvisioner) Provision() error {
 		return err
 	}
 
-	// Fetch Deployment Record
-	var deployment models.Deployment
 	if err := database.DB.First(&deployment, kp.InstallReq.DeploymentID).Error; err != nil {
 		log.Println("❌ Deployment not found:", err)
 		return err

@@ -2,6 +2,7 @@ package projects
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/Vinayakatk/marketplace-prototype/pkg/database"
 	"github.com/Vinayakatk/marketplace-prototype/pkg/models"
 	"github.com/go-chi/chi/v5"
@@ -26,7 +27,10 @@ func CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(project)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": fmt.Sprintf("Project: %s created successfully", project.Name),
+	})
 }
 
 func ListProjects(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +42,7 @@ func ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var projects []models.Project
-	if err := database.DB.Where("user_id = ?", userID).Find(&projects).Error; err != nil {
+	if err := database.DB.Preload("User").Preload("Deployments").Where("user_id = ?", userID).Find(&projects).Error; err != nil {
 		http.Error(w, "Failed to fetch projects", http.StatusInternalServerError)
 		return
 	}
@@ -55,7 +59,7 @@ func GetDeploymentsOfAProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(project)
+	json.NewEncoder(w).Encode(project.Deployments)
 }
 
 func DeleteProject(w http.ResponseWriter, r *http.Request) {
